@@ -22,11 +22,10 @@ namespace DataboxConsoleApp
             Console.WriteLine("  6 - Cancel job");
             Console.WriteLine("  7 - Delete job");
             Console.WriteLine("  8 - Download shipping label uri");
-            Console.WriteLine("  9 - Get region availability");
-            Console.WriteLine(" 10 - Book shipment pickup");
-            Console.WriteLine(" 11 - Get copy logs uri");
-            Console.WriteLine(" 12 - Get secrets");
-            Console.Write("\nChoose an option (1 to 12): ");
+            Console.WriteLine("  9 - Book shipment pickup");
+            Console.WriteLine(" 10 - Get copy logs uri");
+            Console.WriteLine(" 11 - Get secrets");
+            Console.Write("\nChoose an option (1 to 11): ");
 
             string action = Console.ReadLine();
 
@@ -65,23 +64,19 @@ namespace DataboxConsoleApp
                     break;
 
                 case "9":
-                    GetRegionAvailability();
-                    break;
-
-                case "10":
                     BookShipmentPickup();
                     break;
 
-                case "11":
+                case "10":
                     GetCopyLogsUri();
                     break;
 
-                case "12":
+                case "11":
                     GetSecrets();
                     break;
 
                 default:
-                    Console.WriteLine("Invalid option.");
+                    Console.WriteLine("Invalid option selected.");
                     break;
             }
 
@@ -349,10 +344,24 @@ namespace DataboxConsoleApp
             // Initializes a new instance of the DataBoxManagementClient class.
             DataBoxManagementClient dataBoxManagementClient = InitializeDataBoxClient();
 
-            CancellationReason cancellationReason = new CancellationReason(reason);
+            // Gets information about the specified job.
+            JobResource jobResource = JobsOperationsExtensions.Get(
+                                        dataBoxManagementClient.Jobs,
+                                        resourceGroupName,
+                                        jobName);
 
-            // Initiate cancel job
-            JobsOperationsExtensions.Cancel(dataBoxManagementClient.Jobs, resourceGroupName, jobName, cancellationReason);
+            if (jobResource.IsCancellable != null
+                && (bool)jobResource.IsCancellable)
+            {
+                CancellationReason cancellationReason = new CancellationReason(reason);
+
+                // Initiate cancel job
+                JobsOperationsExtensions.Cancel(
+                    dataBoxManagementClient.Jobs,
+                    resourceGroupName,
+                    jobName,
+                    cancellationReason);
+            }
         }
 
         /// <summary>
@@ -366,8 +375,21 @@ namespace DataboxConsoleApp
             // Initializes a new instance of the DataBoxManagementClient class.
             DataBoxManagementClient dataBoxManagementClient = InitializeDataBoxClient();
 
-            // Initiate cancel job
-            JobsOperationsExtensions.Delete(dataBoxManagementClient.Jobs, resourceGroupName, jobName);
+            // Gets information about the specified job.
+            JobResource jobResource = JobsOperationsExtensions.Get(
+                                        dataBoxManagementClient.Jobs,
+                                        resourceGroupName,
+                                        jobName);
+
+            if (jobResource.Status == StageName.Cancelled
+                || jobResource.Status == StageName.Completed
+                || jobResource.Status == StageName.CompletedWithErrors)
+            {
+                // Initiate delete job
+                JobsOperationsExtensions.Delete(dataBoxManagementClient.Jobs,
+                    resourceGroupName,
+                    jobName);
+            }
         }
 
         /// <summary>
@@ -381,37 +403,22 @@ namespace DataboxConsoleApp
             // Initializes a new instance of the DataBoxManagementClient class.
             DataBoxManagementClient dataBoxManagementClient = InitializeDataBoxClient();
 
-            // Initiate cancel job
-            ShippingLabelDetails shippingLabelDetails = JobsOperationsExtensions.DownloadShippingLabelUri(dataBoxManagementClient.Jobs, resourceGroupName, jobName);
-            Console.WriteLine("Shipping address sas url: \n{0}", shippingLabelDetails.ShippingLabelSasUri);
-            Console.ReadLine();
-        }
+            // Gets information about the specified job.
+            JobResource jobResource = JobsOperationsExtensions.Get(
+                                        dataBoxManagementClient.Jobs,
+                                        resourceGroupName,
+                                        jobName);
 
-        /// <summary>
-        /// This method returns the list of supported service regions and regions for destination
-        /// storage accounts.
-        /// </summary>
-        private static void GetRegionAvailability()
-        {
-            string location = "<location>";
+            if (jobResource.Status == StageName.Delivered)
+            {
+                // Initiate cancel job
+                ShippingLabelDetails shippingLabelDetails = JobsOperationsExtensions.DownloadShippingLabelUri(
+                                                                dataBoxManagementClient.Jobs, 
+                                                                resourceGroupName,
+                                                                jobName);
 
-            // Initializes a new instance of the DataBoxManagementClient class
-            DataBoxManagementClient dataBoxManagementClient = InitializeDataBoxClient();
-            dataBoxManagementClient.Location = location;
-
-            CountryCode countryCode = CountryCode.US;
-            RegionAvailabilityInput regionAvailabilityInput = new RegionAvailabilityInput(
-                countryCode,
-                DeviceType.Pod);
-
-            // Initiate to get list of support regions (service and stroage accout)
-            RegionAvailabilityResponse regionAvailabilityResponse = ServiceOperationsExtensions.RegionAvailability(
-                dataBoxManagementClient.Service,
-                regionAvailabilityInput);
-
-            // Get list of support regions
-            List<SupportedRegions> supportRegions = new List<SupportedRegions>();
-            supportRegions.AddRange(regionAvailabilityResponse.SupportedRegions);
+                Console.WriteLine("Shipping address sas url: \n{0}", shippingLabelDetails.ShippingLabelSasUri);
+            }
         }
 
         /// <summary>
@@ -431,14 +438,23 @@ namespace DataboxConsoleApp
             // Initializes a new instance of the DataBoxManagementClient class
             DataBoxManagementClient dataBoxManagementClient = InitializeDataBoxClient();
 
-            // Initiate Book shipment pick up
-            ShipmentPickUpResponse shipmentPickUpResponse = JobsOperationsExtensions.BookShipmentPickUp(
-                                                                dataBoxManagementClient.Jobs,
-                                                                resourceGroupName,
-                                                                jobName,
-                                                                shipmentPickUpRequest);
+            // Gets information about the specified job.
+            JobResource jobResource = JobsOperationsExtensions.Get(
+                                        dataBoxManagementClient.Jobs,
+                                        resourceGroupName,
+                                        jobName);
 
-            Console.WriteLine("Confirmation number: {0}", shipmentPickUpResponse.ConfirmationNumber);
+            if (jobResource.Status == StageName.Delivered)
+            {
+                // Initiate Book shipment pick up
+                ShipmentPickUpResponse shipmentPickUpResponse = JobsOperationsExtensions.BookShipmentPickUp(
+                    dataBoxManagementClient.Jobs,
+                    resourceGroupName,
+                    jobName,
+                    shipmentPickUpRequest);
+
+                Console.WriteLine("Confirmation number: {0}", shipmentPickUpResponse.ConfirmationNumber);
+            }
         }
 
         /// <summary>
@@ -446,20 +462,37 @@ namespace DataboxConsoleApp
         /// </summary>
         private static void GetCopyLogsUri()
         {
-            string resourceGroupName = "<resource-group-name";
+            string resourceGroupName = "<resource-group-name>";
             string jobName = "<job-name>";
 
             // Initializes a new instance of the DataBoxManagementClient class
             DataBoxManagementClient dataBoxManagementClient = InitializeDataBoxClient();
 
-            GetCopyLogsUriOutput getCopyLogsUriOutput = JobsOperationsExtensions.GetCopyLogsUri(dataBoxManagementClient.Jobs, resourceGroupName, jobName);
+            // Gets information about the specified job.
+            JobResource jobResource = JobsOperationsExtensions.Get(
+                                        dataBoxManagementClient.Jobs,
+                                        resourceGroupName,
+                                        jobName);
 
-            if (getCopyLogsUriOutput.CopyLogDetails != null)
+            if (jobResource.Status == StageName.DataCopy
+                || jobResource.Status == StageName.Completed
+                || jobResource.Status == StageName.CompletedWithErrors)
             {
-                Console.WriteLine("Copy log details");
-                foreach (AccountCopyLogDetails copyLogitem in getCopyLogsUriOutput.CopyLogDetails)
+                // Fetches the Copy log details
+                GetCopyLogsUriOutput getCopyLogsUriOutput =
+                    JobsOperationsExtensions.GetCopyLogsUri(
+                        dataBoxManagementClient.Jobs,
+                        resourceGroupName,
+                        jobName);
+
+                if (getCopyLogsUriOutput.CopyLogDetails != null)
                 {
-                    Console.WriteLine(string.Concat("Account name: ", copyLogitem.AccountName, Environment.NewLine, "Copy log link: ", copyLogitem.CopyLogLink, Environment.NewLine, Environment.NewLine));
+                    Console.WriteLine("Copy log details");
+                    foreach (AccountCopyLogDetails copyLogitem in getCopyLogsUriOutput.CopyLogDetails)
+                    {
+                        Console.WriteLine(string.Concat("  Account name: ", copyLogitem.AccountName, Environment.NewLine,
+                            "  Copy log link: ", copyLogitem.CopyLogLink, Environment.NewLine, Environment.NewLine));
+                    }
                 }
             }
         }
@@ -475,28 +508,47 @@ namespace DataboxConsoleApp
             // Initializes a new instance of the DataBoxManagementClient class
             DataBoxManagementClient dataBoxManagementClient = InitializeDataBoxClient();
 
-            UnencryptedSecrets secrets = ListSecretsOperationsExtensions.ListByJobs(dataBoxManagementClient.ListSecrets, resourceGroupName, jobName);
-            PodJobSecrets podSecret = (PodJobSecrets)secrets.JobSecrets;
+            // Gets information about the specified job.
+            JobResource jobResource = JobsOperationsExtensions.Get(
+                                        dataBoxManagementClient.Jobs,
+                                        resourceGroupName,
+                                        jobName);
 
-            if (podSecret.PodSecrets != null)
+            if (jobResource.Status != null
+                && (int)jobResource.Status >= (int)StageName.Delivered
+                && (int)jobResource.Status <= (int)StageName.DataCopy)
             {
-                Console.WriteLine("Azure Databox device credentails");
-                foreach (PodSecret accountCredentials in podSecret.PodSecrets)
-                {
-                    Console.WriteLine(" Device serial number: {0}", accountCredentials.DeviceSerialNumber);
-                    Console.WriteLine(" Device password: {0}", accountCredentials.DevicePassword);
+                // Fetches the list of unencrypted secrets
+                UnencryptedSecrets secrets = ListSecretsOperationsExtensions.ListByJobs(
+                                                dataBoxManagementClient.ListSecrets,
+                                                resourceGroupName,
+                                                jobName);
 
-                    foreach (AccountCredentialDetails accountCredentialDetails in accountCredentials.AccountCredentialDetails)
+                PodJobSecrets podSecret = (PodJobSecrets)secrets.JobSecrets;
+
+                if (podSecret.PodSecrets != null)
+                {
+                    Console.WriteLine("Azure Databox device credentails");
+                    foreach (PodSecret accountCredentials in podSecret.PodSecrets)
                     {
-                        Console.WriteLine("  Account name: {0}", accountCredentialDetails.AccountName);
-                        foreach (ShareCredentialDetails shareCredentialDetails in accountCredentialDetails.ShareCredentialDetails)
+                        Console.WriteLine(" Device serial number: {0}", accountCredentials.DeviceSerialNumber);
+                        Console.WriteLine(" Device password: {0}", accountCredentials.DevicePassword);
+
+                        foreach (AccountCredentialDetails accountCredentialDetails in
+                            accountCredentials.AccountCredentialDetails)
                         {
-                            Console.WriteLine("   Share name: {0}", shareCredentialDetails.ShareName);
-                            Console.WriteLine("   User name: {0}", shareCredentialDetails.UserName);
-                            Console.WriteLine("   Password: {0}{1}", shareCredentialDetails.Password, Environment.NewLine);
+                            Console.WriteLine("  Account name: {0}", accountCredentialDetails.AccountName);
+                            foreach (ShareCredentialDetails shareCredentialDetails in
+                                    accountCredentialDetails.ShareCredentialDetails)
+                            {
+                                Console.WriteLine("   Share name: {0}", shareCredentialDetails.ShareName);
+                                Console.WriteLine("   User name: {0}", shareCredentialDetails.UserName);
+                                Console.WriteLine("   Password: {0}{1}", shareCredentialDetails.Password, Environment.NewLine);
+                            }
                         }
+                        Console.WriteLine();
                     }
-                    Console.WriteLine();
+                    Console.ReadLine();
                 }
             }
         }
