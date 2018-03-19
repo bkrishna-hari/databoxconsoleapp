@@ -236,6 +236,9 @@ namespace DataboxConsoleApp
 
             ValidateAddress validateAddress = new ValidateAddress(shippingAddress, DeviceType.Pod);
             AddressValidationOutput addressValidationOutput = ServiceOperationsExtensions.ValidateAddressMethod(dataBoxManagementClient.Service, validateAddress);
+
+            // Verify shipping address validation status
+            CheckShippingAddressValidationResult(addressValidationOutput);
         }
 
         /// <summary>
@@ -264,7 +267,8 @@ namespace DataboxConsoleApp
                 StateOrProvince = stateOrProvince,
             };
 
-            string emailIds = "<email-ids>";        // Input a semicolon (;) separated string of email ids, eg. "abc@outlook.com;xyz@outlook.com"
+            string emailIds = "<email-ids>";
+            // Input a semicolon (;) separated string of email ids, eg. "abc@outlook.com;xyz@outlook.com"
             string phoneNumber = "<phone-number>";
             string contactName = "<contact-name>";
 
@@ -278,13 +282,21 @@ namespace DataboxConsoleApp
                 ContactName = contactName
             };
 
-            string storageAccProviderType = "Microsoft.Storage"; // Microsoft.Storage / Microsoft.ClassicStorage
+            string storageAccProviderType = "Microsoft.Storage"; // Input the storage account provider type; Valid types: Microsoft.Storage / Microsoft.ClassicStorage
             string storageAccResourceGroupName = "<storage-account-resource-group-name>";
             string storageAccName = "<storage-account-name>";
-            AccountType accountType = AccountType.GeneralPurposeStorage;
+            AccountType accountType = "<account-type>";  // Choose account type from Storage AccountType list. eg. AccountType.GeneralPurposeStorage
 
             List<DestinationAccountDetails> destinationAccountDetails = new List<DestinationAccountDetails>();
-            destinationAccountDetails.Add(new DestinationAccountDetails(string.Concat("/subscriptions/", subscriptionId, "/resourceGroups/", storageAccResourceGroupName, "/providers/", storageAccProviderType, "/storageAccounts/", storageAccName.ToLower()), accountType));
+                        destinationAccountDetails.Add(
+                            new DestinationAccountDetails(
+                                string.Concat("/subscriptions/", subscriptionId, "/resourceGroups/", storageAccResourceGroupName,
+                                    "/providers/", storageAccProviderType, "/storageAccounts/", storageAccName.ToLower()), accountType));
+
+
+            // Note.
+            // For multiple destination storage accounts, follow above steps to add more than one account.
+            // The storage accounts should be in the same Azure DataBox order's subscription and location (region).
 
             PodJobDetails jobDetails = new PodJobDetails(contactDetails, shippingAddress);
 
@@ -300,36 +312,66 @@ namespace DataboxConsoleApp
             dataBoxManagementClient.Location = location;
 
             // Validate shipping address
-            AddressValidationOutput addressValidateResult = ServiceOperationsExtensions.ValidateAddressMethod(dataBoxManagementClient.Service, new ValidateAddress(shippingAddress, newJobResource.DeviceType));
+            AddressValidationOutput addressValidateResult =
+                ServiceOperationsExtensions.ValidateAddressMethod(
+                    dataBoxManagementClient.Service,
+                    new ValidateAddress(
+                        shippingAddress,
+                        newJobResource.DeviceType));
 
-            if (addressValidateResult.ValidationStatus != AddressValidationStatus.Valid)
-            {
-                Console.WriteLine("Address validation status: {0}", addressValidateResult.ValidationStatus);
-
-                if (addressValidateResult.ValidationStatus == AddressValidationStatus.Ambiguous)
-                {
-                    Console.WriteLine("\nSUPPORT ADDRESSES:");
-                    foreach (ShippingAddress address in addressValidateResult.AlternateAddresses)
-                    {
-                        Console.WriteLine("Address type: {0}", address.AddressType);
-                        if (!(string.IsNullOrEmpty(address.CompanyName))) Console.WriteLine("Company name: {0}", address.CompanyName);
-                        if (!(string.IsNullOrEmpty(address.StreetAddress1))) Console.WriteLine("Street address1: {0}", address.StreetAddress1);
-                        if (!(string.IsNullOrEmpty(address.StreetAddress2))) Console.WriteLine("Street address2: {0}", address.StreetAddress2);
-                        if (!(string.IsNullOrEmpty(address.StreetAddress3))) Console.WriteLine("Street address3: {0}", address.StreetAddress3);
-                        if (!(string.IsNullOrEmpty(address.City))) Console.WriteLine("City: {0}", address.City);
-                        if (!(string.IsNullOrEmpty(address.StateOrProvince))) Console.WriteLine("State/Province: {0}", address.StateOrProvince);
-                        if (!(string.IsNullOrEmpty(address.Country))) Console.WriteLine("Country: {0}", address.Country);
-                        if (!(string.IsNullOrEmpty(address.PostalCode))) Console.WriteLine("Postal code: {0}", address.PostalCode);
-                        if (!(string.IsNullOrEmpty(address.ZipExtendedCode))) Console.WriteLine("Zip extended code: {0}", address.ZipExtendedCode);
-                        Console.WriteLine();
-                    }
-                }
-                Console.ReadLine();
-                return;
-            }
+            // Verify shipping address validation status
+            CheckShippingAddressValidationResult(addressValidateResult);
 
             // Creates a new job.
-            JobResource jobResource = JobsOperationsExtensions.Create(dataBoxManagementClient.Jobs, resourceGroupName, jobName, newJobResource);
+            if (addressValidateResult.ValidationStatus == AddressValidationStatus.Valid)
+            {
+                JobResource jobResource = JobsOperationsExtensions.Create(
+                    dataBoxManagementClient.Jobs,
+                    resourceGroupName,
+                    jobName, newJobResource);
+            }
+        }
+
+        /// <summary>
+        /// Verify shipping address validation status.
+        /// </summary>
+        /// <param name="addressValidateResult"></param>
+        private static void CheckShippingAddressValidationResult(AddressValidationOutput addressValidateResult)
+        {
+            // Print alternate shipping address result status
+            Console.WriteLine("Shipping address validation status: {0}", addressValidateResult.ValidationStatus);
+
+            if (addressValidateResult.ValidationStatus == AddressValidationStatus.Invalid)
+                return;
+
+            if (addressValidateResult.ValidationStatus == AddressValidationStatus.Ambiguous)
+            {
+                Console.WriteLine("\nSUPPORT/ALTERNATE ADDRESS:");
+                foreach (ShippingAddress address in addressValidateResult.AlternateAddresses)
+                {
+                    Console.WriteLine("Address type: {0}", address.AddressType);
+                    if (!(string.IsNullOrEmpty(address.CompanyName)))
+                        Console.WriteLine("Company name: {0}", address.CompanyName);
+                    if (!(string.IsNullOrEmpty(address.StreetAddress1)))
+                        Console.WriteLine("Street address1: {0}", address.StreetAddress1);
+                    if (!(string.IsNullOrEmpty(address.StreetAddress2)))
+                        Console.WriteLine("Street address2: {0}", address.StreetAddress2);
+                    if (!(string.IsNullOrEmpty(address.StreetAddress3)))
+                        Console.WriteLine("Street address3: {0}", address.StreetAddress3);
+                    if (!(string.IsNullOrEmpty(address.City))) Console.WriteLine("City: {0}", address.City);
+                    if (!(string.IsNullOrEmpty(address.StateOrProvince)))
+                        Console.WriteLine("State/Province: {0}", address.StateOrProvince);
+                    if (!(string.IsNullOrEmpty(address.Country)))
+                        Console.WriteLine("Country: {0}", address.Country);
+                    if (!(string.IsNullOrEmpty(address.PostalCode)))
+                        Console.WriteLine("Postal code: {0}", address.PostalCode);
+                    if (!(string.IsNullOrEmpty(address.ZipExtendedCode)))
+                        Console.WriteLine("Zip extended code: {0}", address.ZipExtendedCode);
+
+                    Console.WriteLine();
+                }
+            }
+            Console.ReadLine();
         }
 
         /// <summary>
@@ -351,7 +393,7 @@ namespace DataboxConsoleApp
                                         jobName);
 
             if (jobResource.IsCancellable != null
-                && (bool)jobResource.IsCancellable)
+                && (bool) jobResource.IsCancellable)
             {
                 CancellationReason cancellationReason = new CancellationReason(reason);
 
@@ -413,16 +455,20 @@ namespace DataboxConsoleApp
             {
                 // Initiate cancel job
                 ShippingLabelDetails shippingLabelDetails = JobsOperationsExtensions.DownloadShippingLabelUri(
-                                                                dataBoxManagementClient.Jobs, 
+                                                                dataBoxManagementClient.Jobs,
                                                                 resourceGroupName,
                                                                 jobName);
 
                 Console.WriteLine("Shipping address sas url: \n{0}", shippingLabelDetails.ShippingLabelSasUri);
             }
+            else
+            {
+                Console.WriteLine("Shipment address will be available only when the job is in delivered stage.");
+            }
         }
 
         /// <summary>
-        /// Initializes a new instance of the ShipmentPickUpRequest class.
+        /// This method initiates a shipment pickup.
         /// </summary>
         private static void BookShipmentPickup()
         {
@@ -455,10 +501,14 @@ namespace DataboxConsoleApp
 
                 Console.WriteLine("Confirmation number: {0}", shipmentPickUpResponse.ConfirmationNumber);
             }
+            else
+            {
+                Console.WriteLine("Shipment pickup will be initiated only when the job is in delivered stage.");
+            }
         }
 
         /// <summary>
-        /// Provides list of copy logs uri.
+        /// This method provides list of copy logs uri.
         /// </summary>
         private static void GetCopyLogsUri()
         {
@@ -494,6 +544,10 @@ namespace DataboxConsoleApp
                             "  Copy log link: ", copyLogitem.CopyLogLink, Environment.NewLine, Environment.NewLine));
                     }
                 }
+            }
+            else
+            {
+                Console.WriteLine("Copy logs will be available only when the job is in either data copy or completed status.");
             }
         }
 
